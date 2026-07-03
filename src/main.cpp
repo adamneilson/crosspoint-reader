@@ -18,6 +18,7 @@
 
 #include <cstring>
 
+#include "AutoFetchStore.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "KOReaderCredentialStore.h"
@@ -25,8 +26,10 @@
 #include "OpdsServerStore.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
+#include "WifiCredentialStore.h"
 #include "activities/Activity.h"
 #include "activities/ActivityManager.h"
+#include "activities/network/AutoFetchActivity.h"
 #include "activities/settings/SdFirmwareUpdateActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -350,6 +353,10 @@ void setup() {
   I18N.setLanguage(static_cast<Language>(SETTINGS.language));
   KOREADER_STORE.loadFromFile();
   OPDS_STORE.loadFromFile();
+  // Loaded here (pre-display, no RenderLock needed) for the auto-fetch boot
+  // gate below; WifiSelectionActivity re-loads WIFI_STORE on entry regardless.
+  WIFI_STORE.loadFromFile();
+  AUTOFETCH_STORE.loadFromFile();
   UITheme::getInstance().reload();
   ButtonNavigator::setMappedInputManager(mappedInputManager);
 
@@ -429,6 +436,17 @@ void setup() {
       break;
   }
 
+  // Daily OPDS auto-fetch gate. Everything here is a cheap struct/SD read; the
+  // WiFi work only happens inside AutoFetchActivity, at most once per calendar
+  // day (the activity stamps the throttle in onEnter, before fetching, and every
+  // one of its exits is a Silent restart, which this gate never re-enters).
+  // Back held at boot is the escape hatch, matching the routing ladder below.
+  const bool autoFetchDue = resume != BootResume::Silent && SETTINGS.autoFetchDaily && AUTOFETCH_STORE.hasTarget() &&
+                            AUTOFETCH_STORE.lastFetchYmd != AutoFetchStore::todayYmd() &&
+                            !mappedInputManager.isPressed(MappedInputManager::Button::Back) &&
+                            !WIFI_STORE.getLastConnectedSsid().empty() &&
+                            WIFI_STORE.findCredential(WIFI_STORE.getLastConnectedSsid());
+
   if (recoveryFirmwareMode) {
     // Skip normal home/reader routing: jump straight into the SD firmware picker.
     activityManager.replaceActivity(
@@ -436,6 +454,8 @@ void setup() {
   } else if (HalSystem::isRebootFromPanic()) {
     // If we rebooted from a panic, go to crash report screen to show the panic info
     activityManager.goToCrashReport();
+  } else if (autoFetchDue) {
+    activityManager.replaceActivity(std::make_unique<AutoFetchActivity>(renderer, mappedInputManager));
   } else if (resume == BootResume::Silent && snapshotTarget == SILENT_REBOOT_TARGET_READER &&
              !APP_STATE.openEpubPath.empty()) {
     activityManager.goToReader(APP_STATE.openEpubPath);

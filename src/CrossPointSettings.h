@@ -275,6 +275,9 @@ class CrossPointSettings {
   uint8_t language = 0;
   // Quick Resume: keep current content visible with moon icon instead of showing a static sleep screen.
   uint8_t quickResumeSleepScreen = QUICK_RESUME_NEVER;
+  // Daily OPDS auto-fetch: on boot/wake, re-download the last OPDS book at most
+  // once per calendar day (target and throttle state live in AutoFetchStore).
+  uint8_t autoFetchDaily = 0;
 
   ~CrossPointSettings() = default;
 

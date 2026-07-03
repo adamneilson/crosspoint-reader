@@ -340,6 +340,33 @@ You can also manage OPDS servers from the web interface while in File Transfer m
 
 For web-based Wi-Fi network management, see [Web Settings (Wi-Fi + OPDS)](#366-web-settings-wi-fi--opds).
 
+##### Daily auto-fetch
+
+For periodicals served over OPDS (for example a self-hosted daily newspaper), the
+**Daily auto-fetch** toggle (Settings -> System) re-downloads the most recent book you
+downloaded from an OPDS server, automatically, on the first boot or wake of each
+calendar day.
+
+How it works:
+
+1. Download the book once from your OPDS server as usual. That book (and that server's
+   credentials) becomes the auto-fetch target; each later OPDS download retargets it.
+2. Enable **Settings -> System -> Daily auto-fetch**.
+3. On the first wake of each day the reader connects to your last-used Wi-Fi network,
+   re-downloads the book, and lands where the boot was headed (your open book or Home).
+
+Behavior notes:
+
+- At most one fetch attempt per calendar day, and only when a saved Wi-Fi network and
+  target exist. A failed attempt (Wi-Fi out of range, server down) is not retried until
+  the next day; downloading manually from the OPDS browser always works and re-arms the
+  target.
+- Press **Back** during the fetch to skip it (or hold Back while waking to bypass it
+  entirely). The fetch screen shows download progress and can cancel mid-transfer.
+- The download goes to a temporary file first and only replaces the existing book when
+  it completes successfully, so a failed fetch never damages the copy you have.
+- Your reading position in the book is preserved across the refresh.
+
 #### 3.6.6 Web Settings (Wi-Fi + OPDS)
 
 While in **File Transfer** mode, the web settings page includes management cards for both **Wi-Fi Networks** and **OPDS Servers**.
