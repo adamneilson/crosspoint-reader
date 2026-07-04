@@ -44,8 +44,10 @@ class AutoFetchStore {
   void markAttempt(const std::string& ymd);
 
   // Today's local date as "YYYY-MM-DD", using the user's configured UTC offset.
-  // System time survives deep sleep on the ESP32 (RTC clock domain) but resets
-  // to the 1970 epoch after a flash or full power loss; see isClockPlausible.
+  // NOTE: on the X3, deep sleep powers the MCU off entirely, so system time is
+  // epoch-reset on EVERY wake. HalClock::begin() restores it from the DS3231's
+  // battery-backed calendar (written during NTP sync), which is what makes this
+  // date valid at boot; see isClockPlausible for the never-synced case.
   static std::string todayYmd();
 
   // False while the system clock is still epoch-era (never NTP-synced since the

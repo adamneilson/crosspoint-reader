@@ -44,5 +44,13 @@ class HalClock {
   bool syncFromNTP();
 
  private:
-  bool writeTimeToRTC(uint8_t hour, uint8_t minute, uint8_t second);
+  bool writeTimeToRTC(const struct tm& utc);
+
+  // Restore the ESP32 system clock from the DS3231 at boot. On the X3, deep
+  // sleep cuts power to the MCU entirely (battery latch MOSFET), so system
+  // time restarts from the 1970 epoch on EVERY wake; only the DS3231 keeps
+  // counting. Without this, anything using time() sees a bogus date until the
+  // next NTP sync. No-op when the RTC's stored date predates 2024 (i.e. the
+  // date registers were never set by an NTP sync).
+  void restoreSystemTimeFromRTC();
 };

@@ -121,14 +121,16 @@ constexpr uint32_t SILENT_REBOOT_MAGIC = 0xC1EAB007;
 constexpr uint32_t SILENT_REBOOT_TARGET_HOME = 0;
 constexpr uint32_t SILENT_REBOOT_TARGET_READER = 1;
 
-// Auto-fetch fallback throttle for when the system clock is implausible (fresh
-// flash or full power loss resets it to the 1970 epoch, and the one-shot NTP
-// hook in WifiSelectionActivity won't re-sync once clockHasBeenSynced is set).
-// Comparing two epoch-era dates would wrongly read as "already fetched today"
-// and starve the fetch forever, so with an implausible clock the gate instead
-// allows ONE attempt per power-cycle: RTC_NOINIT survives silent restarts and
-// deep sleep, and is garbage (magic mismatch) after a true power-on. The
-// attempt itself NTP-syncs and stamps a real date, restoring daily cadence.
+// Auto-fetch bootstrap throttle for when the system clock is implausible. In
+// normal operation the clock is valid at every boot: HalClock::begin() restores
+// it from the DS3231's battery-backed calendar (which syncFromNTP writes), so
+// the gate uses real date comparison. This fallback only covers the window
+// between a fresh flash and the first successful NTP sync, when neither the
+// system clock nor the DS3231 date is trustworthy. NOTE: on the X3, deep sleep
+// powers the MCU off entirely, so RTC_NOINIT only survives silent restarts
+// within a power session, NOT sleep/wake — meaning a WiFi-less device may
+// attempt once per wake until its first successful sync. That window is
+// bounded (20s connect timeout) and ends permanently at the first sync.
 RTC_NOINIT_ATTR uint32_t autoFetchAttemptMagic;
 constexpr uint32_t AUTOFETCH_ATTEMPT_MAGIC = 0xDA11FE7C;
 
