@@ -5,6 +5,7 @@ Welcome to the **CrossPoint** firmware. This guide outlines the hardware control
 - [CrossPoint User Guide](#crosspoint-user-guide)
   - [1. Hardware Overview](#1-hardware-overview)
     - [Button Layout](#button-layout)
+    - [Taking a Screenshot](#taking-a-screenshot)
   - [2. Power \& Startup](#2-power--startup)
     - [Power On / Off](#power-on--off)
     - [First Launch](#first-launch)
@@ -14,7 +15,11 @@ Welcome to the **CrossPoint** firmware. This guide outlines the hardware control
     - [3.3 Browse Files Screen](#33-browse-files-screen)
     - [3.4 Recent Books Screen](#34-recent-books-screen)
     - [3.5 File Transfer Screen](#35-file-transfer-screen)
-      - [3.5.1 Calibre Wireless Transfers](#351-calibre-wireless-transfers)
+    - [3.5.1 Calibre Wireless Transfers](#351-calibre-wireless-transfers)
+      - [Installing the Plugin in Calibre](#installing-the-plugin-in-calibre)
+      - [Configuring the CrossPoint Plugin in Calibre](#configuring-the-crosspoint-plugin-in-calibre)
+      - [Uploading Books](#uploading-books)
+      - [Removing a Book](#removing-a-book)
     - [3.6 Settings](#36-settings)
       - [3.6.1 Display](#361-display)
       - [3.6.2 Reader](#362-reader)
@@ -23,21 +28,25 @@ Welcome to the **CrossPoint** firmware. This guide outlines the hardware control
       - [3.6.5 OPDS Servers (Multiple Libraries)](#365-opds-servers-multiple-libraries)
       - [3.6.6 Web Settings (Wi-Fi + OPDS)](#366-web-settings-wi-fi--opds)
       - [3.6.7 KOReader Sync Quick Setup](#367-koreader-sync-quick-setup)
+        - [Option A: Free Public Server (`sync.koreader.rocks`)](#option-a-free-public-server-synckoreaderrocks)
+        - [Option B: Self-Hosted Server (Docker Compose)](#option-b-self-hosted-server-docker-compose)
     - [3.7 Sleep Screen](#37-sleep-screen)
+      - [Cover settings](#cover-settings)
+      - [Custom images](#custom-images)
     - [3.8 Custom Fonts (SD Card)](#38-custom-fonts-sd-card)
   - [4. Reading Mode](#4-reading-mode)
-      - [Page Turning](#page-turning)
-      - [Chapter Navigation](#chapter-navigation)
-      - [Auto Page Turn](#auto-page-turn)
-      - [Tilt Page Turn (X3 only)](#tilt-page-turn-x3-only)
-      - [Footnote Navigation](#footnote-navigation)
-      - [System Navigation](#system-navigation)
-      - [Supported Languages](#supported-languages)
+    - [Page Turning](#page-turning)
+    - [Chapter Navigation](#chapter-navigation)
+    - [Auto Page Turn](#auto-page-turn)
+    - [Tilt Page Turn (X3 only)](#tilt-page-turn-x3-only)
+    - [Footnote Navigation](#footnote-navigation)
+    - [System Navigation](#system-navigation)
+    - [Supported Languages](#supported-languages)
   - [5. Reader Menu](#5-reader-menu)
-      - [5.1 Chapter Selection](#51-chapter-selection)
-      - [5.2 Bookmarks](#52-bookmarks)
-  - [6. Current Limitations & Roadmap](#6-current-limitations--roadmap)
-  - [7. Troubleshooting Issues & Escaping Bootloop](#7-troubleshooting-issues--escaping-bootloop)
+    - [5.1 Chapter Selection](#51-chapter-selection)
+    - [5.2 Bookmarks](#52-bookmarks)
+  - [6. Current Limitations \& Roadmap](#6-current-limitations--roadmap)
+  - [7. Troubleshooting Issues \& Escaping Bootloop](#7-troubleshooting-issues--escaping-bootloop)
 
 ## 1. Hardware Overview
 
@@ -174,6 +183,7 @@ The Settings screen allows you to configure the device's behavior. There are a f
   - "Cover" - The book cover image (Note: this is experimental and may not work as expected)
   - "None" - A blank screen
   - "Cover + Custom" - The book cover image while actively reading, falls back to "Custom" behavior otherwise
+  - "Quick resume" - The text of the last page read will be displayed on the sleep screen and a moon icon is shown on the edge of the screen. Waking up the device will return to the same page of the opened book. This is useful for quickly resuming reading without waiting for the device to fully wake up and load the book.
 
 - **Sleep Screen Cover Mode**: How to display the book cover when "Cover" sleep screen is selected:
   
@@ -185,6 +195,8 @@ The Settings screen allows you to configure the device's behavior. There are a f
   - "None" (default) - The cover image will be converted to a grayscale image and displayed as it is
   - "Contrast" - The image will be displayed as a black & white image without grayscale conversion
   - "Inverted" - The image will be inverted as in white & black and will be displayed without grayscale conversion
+
+- **Quick Resume on Timeout**: Whether to enable the "Quick Resume" sleep screen when the device goes to sleep due to inactivity (System > Time to Sleep). This is useful for quickly resuming reading without waiting for the device to fully wake up and load the book. This overwrites the Sleep Screen Cover Mode when enabled.
 
 - **Status Bar**: Configure the status bar displayed while reading:
   
@@ -327,6 +339,33 @@ You can also manage OPDS servers from the web interface while in File Transfer m
 3. Use the **OPDS Servers** card to add, edit, or delete entries.
 
 For web-based Wi-Fi network management, see [Web Settings (Wi-Fi + OPDS)](#366-web-settings-wi-fi--opds).
+
+##### Daily auto-fetch
+
+For periodicals served over OPDS (for example a self-hosted daily newspaper), the
+**Daily auto-fetch** toggle (Settings -> System) re-downloads the most recent book you
+downloaded from an OPDS server, automatically, on the first boot or wake of each
+calendar day.
+
+How it works:
+
+1. Download the book once from your OPDS server as usual. That book (and that server's
+   credentials) becomes the auto-fetch target; each later OPDS download retargets it.
+2. Enable **Settings -> System -> Daily auto-fetch**.
+3. On the first wake of each day the reader connects to your last-used Wi-Fi network,
+   re-downloads the book, and lands where the boot was headed (your open book or Home).
+
+Behavior notes:
+
+- At most one fetch attempt per calendar day, and only when a saved Wi-Fi network and
+  target exist. A failed attempt (Wi-Fi out of range, server down) is not retried until
+  the next day; downloading manually from the OPDS browser always works and re-arms the
+  target.
+- Press **Back** during the fetch to skip it (or hold Back while waking to bypass it
+  entirely). The fetch screen shows download progress and can cancel mid-transfer.
+- The download goes to a temporary file first and only replaces the existing book when
+  it completes successfully, so a failed fetch never damages the copy you have.
+- Your reading position in the book is preserved across the refresh.
 
 #### 3.6.6 Web Settings (Wi-Fi + OPDS)
 

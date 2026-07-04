@@ -3,9 +3,12 @@
 
 #include <cstdint>
 #include <iosfwd>
+#include <mutex>
 
 class CrossPointSettings {
  private:
+  mutable std::mutex _mutex;
+
   // Private constructor for singleton
   CrossPointSettings() = default;
 
@@ -16,6 +19,10 @@ class CrossPointSettings {
   // Delete copy constructor and assignment
   CrossPointSettings(const CrossPointSettings&) = delete;
   CrossPointSettings& operator=(const CrossPointSettings&) = delete;
+
+  // Access the settings mutex for protecting multi-field reads/writes from other cores.
+  // Callers must not re-enter SETTINGS methods that lock _mutex while holding it.
+  std::mutex& getMutex() const { return _mutex; }
 
   enum SLEEP_SCREEN_MODE {
     DARK = 0,
@@ -268,6 +275,12 @@ class CrossPointSettings {
   uint8_t language = 0;
   // Quick Resume: keep current content visible with moon icon instead of showing a static sleep screen.
   uint8_t quickResumeSleepScreen = QUICK_RESUME_NEVER;
+  // Daily OPDS auto-fetch: on boot/wake, re-download the last OPDS book at most
+  // once per calendar day (target and throttle state live in AutoFetchStore).
+  uint8_t autoFetchDaily = 0;
+  // Show today's date centred in the home screen top bar (hidden automatically
+  // while the clock has never been set; see HalClock::restoreSystemTimeFromRTC).
+  uint8_t homeScreenDate = 1;
 
   ~CrossPointSettings() = default;
 

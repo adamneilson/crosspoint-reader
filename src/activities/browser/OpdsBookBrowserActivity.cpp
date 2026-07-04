@@ -6,6 +6,7 @@
 #include <OpdsStream.h>
 #include <WiFi.h>
 
+#include "AutoFetchStore.h"
 #include "MappedInputManager.h"
 #include "SilentRestart.h"
 #include "activities/network/WifiSelectionActivity.h"
@@ -284,6 +285,9 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
 
   if (result == HttpDownloader::OK) {
     clearBookCache(filename);
+    // Remember this book as the daily auto-fetch target (only acted on when the
+    // autoFetchDaily setting is enabled; see AutoFetchActivity).
+    AUTOFETCH_STORE.setTarget(downloadUrl, filename, server.username, server.password);
     state = BrowserState::BROWSING;
   } else {
     state = BrowserState::ERROR;

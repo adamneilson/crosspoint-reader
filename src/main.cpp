@@ -18,6 +18,7 @@
 
 #include <cstring>
 
+#include "AutoFetchStore.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "KOReaderCredentialStore.h"
@@ -25,8 +26,10 @@
 #include "OpdsServerStore.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
+#include "WifiCredentialStore.h"
 #include "activities/Activity.h"
 #include "activities/ActivityManager.h"
+#include "activities/network/AutoFetchActivity.h"
 #include "activities/settings/SdFirmwareUpdateActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -117,6 +120,19 @@ RTC_NOINIT_ATTR uint32_t silentRebootTarget;
 constexpr uint32_t SILENT_REBOOT_MAGIC = 0xC1EAB007;
 constexpr uint32_t SILENT_REBOOT_TARGET_HOME = 0;
 constexpr uint32_t SILENT_REBOOT_TARGET_READER = 1;
+
+// Auto-fetch bootstrap throttle for when the system clock is implausible. In
+// normal operation the clock is valid at every boot: HalClock::begin() restores
+// it from the DS3231's battery-backed calendar (which syncFromNTP writes), so
+// the gate uses real date comparison. This fallback only covers the window
+// between a fresh flash and the first successful NTP sync, when neither the
+// system clock nor the DS3231 date is trustworthy. NOTE: on the X3, deep sleep
+// powers the MCU off entirely, so RTC_NOINIT only survives silent restarts
+// within a power session, NOT sleep/wake — meaning a WiFi-less device may
+// attempt once per wake until its first successful sync. That window is
+// bounded (20s connect timeout) and ends permanently at the first sync.
+RTC_NOINIT_ATTR uint32_t autoFetchAttemptMagic;
+constexpr uint32_t AUTOFETCH_ATTEMPT_MAGIC = 0xDA11FE7C;
 
 // How the device is coming back to life, resolved once at boot. Both resume
 // flows suppress the splash and leave the panel holding its pre-boot frame; a
@@ -350,6 +366,10 @@ void setup() {
   I18N.setLanguage(static_cast<Language>(SETTINGS.language));
   KOREADER_STORE.loadFromFile();
   OPDS_STORE.loadFromFile();
+  // Loaded here (pre-display, no RenderLock needed) for the auto-fetch boot
+  // gate below; WifiSelectionActivity re-loads WIFI_STORE on entry regardless.
+  WIFI_STORE.loadFromFile();
+  AUTOFETCH_STORE.loadFromFile();
   UITheme::getInstance().reload();
   ButtonNavigator::setMappedInputManager(mappedInputManager);
 
@@ -429,6 +449,24 @@ void setup() {
       break;
   }
 
+  // Daily OPDS auto-fetch gate. Everything here is a cheap struct/SD read; the
+  // WiFi work only happens inside AutoFetchActivity, at most once per calendar
+  // day (the activity stamps the throttle in onEnter, before fetching, and every
+  // one of its exits is a Silent restart, which this gate never re-enters).
+  // Back held at boot is the escape hatch, matching the routing ladder below.
+  //
+  // With a plausible clock, "due" is a calendar-date change. With an implausible
+  // clock (epoch reset after flash/power loss; NTP not yet run), comparing two
+  // fake dates would starve the fetch, so fall back to once per power-cycle via
+  // autoFetchAttemptMagic. The attempt NTP-syncs and stamps the real date.
+  const bool autoFetchDateDue = AutoFetchStore::isClockPlausible()
+                                    ? AUTOFETCH_STORE.lastFetchYmd != AutoFetchStore::todayYmd()
+                                    : autoFetchAttemptMagic != AUTOFETCH_ATTEMPT_MAGIC;
+  const bool autoFetchDue = resume != BootResume::Silent && SETTINGS.autoFetchDaily && AUTOFETCH_STORE.hasTarget() &&
+                            autoFetchDateDue && !mappedInputManager.isPressed(MappedInputManager::Button::Back) &&
+                            !WIFI_STORE.getLastConnectedSsid().empty() &&
+                            WIFI_STORE.findCredential(WIFI_STORE.getLastConnectedSsid());
+
   if (recoveryFirmwareMode) {
     // Skip normal home/reader routing: jump straight into the SD firmware picker.
     activityManager.replaceActivity(
@@ -436,6 +474,9 @@ void setup() {
   } else if (HalSystem::isRebootFromPanic()) {
     // If we rebooted from a panic, go to crash report screen to show the panic info
     activityManager.goToCrashReport();
+  } else if (autoFetchDue) {
+    autoFetchAttemptMagic = AUTOFETCH_ATTEMPT_MAGIC;  // one attempt per power-cycle when the clock is implausible
+    activityManager.replaceActivity(std::make_unique<AutoFetchActivity>(renderer, mappedInputManager));
   } else if (resume == BootResume::Silent && snapshotTarget == SILENT_REBOOT_TARGET_READER &&
              !APP_STATE.openEpubPath.empty()) {
     activityManager.goToReader(APP_STATE.openEpubPath);
