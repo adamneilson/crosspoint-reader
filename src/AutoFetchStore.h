@@ -44,10 +44,14 @@ class AutoFetchStore {
   void markAttempt(const std::string& ymd);
 
   // Today's local date as "YYYY-MM-DD", using the user's configured UTC offset.
-  // System time survives deep sleep on the ESP32 (RTC clock domain); after a
-  // full power loss it restarts from the epoch, which still throttles correctly
-  // (a constant, wrong date) until NTP corrects it during the next fetch.
+  // System time survives deep sleep on the ESP32 (RTC clock domain) but resets
+  // to the 1970 epoch after a flash or full power loss; see isClockPlausible.
   static std::string todayYmd();
+
+  // False while the system clock is still epoch-era (never NTP-synced since the
+  // last cold reset). Date comparisons are meaningless then; the boot gate falls
+  // back to a once-per-power-cycle throttle and the fetch NTP-syncs the clock.
+  static bool isClockPlausible();
 };
 
 #define AUTOFETCH_STORE AutoFetchStore::getInstance()

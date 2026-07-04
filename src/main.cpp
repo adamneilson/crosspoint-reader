@@ -121,6 +121,17 @@ constexpr uint32_t SILENT_REBOOT_MAGIC = 0xC1EAB007;
 constexpr uint32_t SILENT_REBOOT_TARGET_HOME = 0;
 constexpr uint32_t SILENT_REBOOT_TARGET_READER = 1;
 
+// Auto-fetch fallback throttle for when the system clock is implausible (fresh
+// flash or full power loss resets it to the 1970 epoch, and the one-shot NTP
+// hook in WifiSelectionActivity won't re-sync once clockHasBeenSynced is set).
+// Comparing two epoch-era dates would wrongly read as "already fetched today"
+// and starve the fetch forever, so with an implausible clock the gate instead
+// allows ONE attempt per power-cycle: RTC_NOINIT survives silent restarts and
+// deep sleep, and is garbage (magic mismatch) after a true power-on. The
+// attempt itself NTP-syncs and stamps a real date, restoring daily cadence.
+RTC_NOINIT_ATTR uint32_t autoFetchAttemptMagic;
+constexpr uint32_t AUTOFETCH_ATTEMPT_MAGIC = 0xDA11FE7C;
+
 // How the device is coming back to life, resolved once at boot. Both resume
 // flows suppress the splash and leave the panel holding its pre-boot frame; a
 // plain boot shows the splash. See setup() for the resolution.
@@ -441,9 +452,16 @@ void setup() {
   // day (the activity stamps the throttle in onEnter, before fetching, and every
   // one of its exits is a Silent restart, which this gate never re-enters).
   // Back held at boot is the escape hatch, matching the routing ladder below.
+  //
+  // With a plausible clock, "due" is a calendar-date change. With an implausible
+  // clock (epoch reset after flash/power loss; NTP not yet run), comparing two
+  // fake dates would starve the fetch, so fall back to once per power-cycle via
+  // autoFetchAttemptMagic. The attempt NTP-syncs and stamps the real date.
+  const bool autoFetchDateDue = AutoFetchStore::isClockPlausible()
+                                    ? AUTOFETCH_STORE.lastFetchYmd != AutoFetchStore::todayYmd()
+                                    : autoFetchAttemptMagic != AUTOFETCH_ATTEMPT_MAGIC;
   const bool autoFetchDue = resume != BootResume::Silent && SETTINGS.autoFetchDaily && AUTOFETCH_STORE.hasTarget() &&
-                            AUTOFETCH_STORE.lastFetchYmd != AutoFetchStore::todayYmd() &&
-                            !mappedInputManager.isPressed(MappedInputManager::Button::Back) &&
+                            autoFetchDateDue && !mappedInputManager.isPressed(MappedInputManager::Button::Back) &&
                             !WIFI_STORE.getLastConnectedSsid().empty() &&
                             WIFI_STORE.findCredential(WIFI_STORE.getLastConnectedSsid());
 
@@ -455,6 +473,7 @@ void setup() {
     // If we rebooted from a panic, go to crash report screen to show the panic info
     activityManager.goToCrashReport();
   } else if (autoFetchDue) {
+    autoFetchAttemptMagic = AUTOFETCH_ATTEMPT_MAGIC;  // one attempt per power-cycle when the clock is implausible
     activityManager.replaceActivity(std::make_unique<AutoFetchActivity>(renderer, mappedInputManager));
   } else if (resume == BootResume::Silent && snapshotTarget == SILENT_REBOOT_TARGET_READER &&
              !APP_STATE.openEpubPath.empty()) {

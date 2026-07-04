@@ -69,6 +69,13 @@ void AutoFetchStore::markAttempt(const std::string& ymd) {
   }
 }
 
+bool AutoFetchStore::isClockPlausible() {
+  const time_t now = time(nullptr);
+  struct tm t;
+  gmtime_r(&now, &t);
+  return t.tm_year + 1900 >= 2024;
+}
+
 std::string AutoFetchStore::todayYmd() {
   time_t now = time(nullptr);
   // Local date using the user's configured UTC offset (quarter-hours, biased by 48)
