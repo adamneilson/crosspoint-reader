@@ -278,6 +278,9 @@ class CrossPointSettings {
   // Daily OPDS auto-fetch: on boot/wake, re-download the last OPDS book at most
   // once per calendar day (target and throttle state live in AutoFetchStore).
   uint8_t autoFetchDaily = 0;
+  // Show today's date centred in the home screen top bar (hidden automatically
+  // while the clock has never been set; see HalClock::restoreSystemTimeFromRTC).
+  uint8_t homeScreenDate = 1;
 
   ~CrossPointSettings() = default;
 

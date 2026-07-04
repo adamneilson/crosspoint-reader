@@ -9,7 +9,9 @@
 #include <Utf8.h>
 #include <Xtc.h>
 
+#include <cstdio>
 #include <cstring>
+#include <ctime>
 #include <vector>
 
 #include "CrossPointSettings.h"
@@ -19,6 +21,32 @@
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+
+namespace {
+// Abbreviated day/month names as translatable string ids (tm_wday: 0 = Sunday).
+constexpr StrId kDayAbbr[7] = {StrId::STR_DAY_SUN, StrId::STR_DAY_MON, StrId::STR_DAY_TUE, StrId::STR_DAY_WED,
+                               StrId::STR_DAY_THU, StrId::STR_DAY_FRI, StrId::STR_DAY_SAT};
+constexpr StrId kMonthAbbr[12] = {StrId::STR_MONTH_JAN, StrId::STR_MONTH_FEB, StrId::STR_MONTH_MAR,
+                                  StrId::STR_MONTH_APR, StrId::STR_MONTH_MAY, StrId::STR_MONTH_JUN,
+                                  StrId::STR_MONTH_JUL, StrId::STR_MONTH_AUG, StrId::STR_MONTH_SEP,
+                                  StrId::STR_MONTH_OCT, StrId::STR_MONTH_NOV, StrId::STR_MONTH_DEC};
+
+// Today's local date as "Sat 4 Jul", or false when the clock has never been
+// set (fresh device, no NTP sync yet) so nothing bogus is shown. Reliable
+// across sleep because HalClock::begin() restores the system clock from the
+// DS3231's battery-backed calendar at every boot.
+bool formatLocalDate(char* buf, size_t bufSize) {
+  time_t now = time(nullptr);
+  now += (static_cast<int>(SETTINGS.clockUtcOffsetQ) - 48) * 15 * 60;
+  struct tm t;
+  gmtime_r(&now, &t);
+  if (t.tm_year + 1900 < 2024) {
+    return false;
+  }
+  snprintf(buf, bufSize, "%s %d %s", I18N.get(kDayAbbr[t.tm_wday]), t.tm_mday, I18N.get(kMonthAbbr[t.tm_mon]));
+  return true;
+}
+}  // namespace
 
 int HomeActivity::getMenuItemCount() const {
   int count = 4;  // File Browser, Recents, File transfer, Settings
@@ -217,6 +245,15 @@ void HomeActivity::render(RenderLock&&) {
 
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.homeTopPadding},
                  metrics.homeContinueReadingInMenu && !recentBooks.empty() ? recentBooks[0].title.c_str() : nullptr);
+
+  // Today's date, centred in the top bar on the battery indicator's row.
+  // Skipped when disabled or when the clock has never been set.
+  if (SETTINGS.homeScreenDate) {
+    char dateBuf[32];
+    if (formatLocalDate(dateBuf, sizeof(dateBuf))) {
+      renderer.drawCenteredText(SMALL_FONT_ID, metrics.topPadding + 5, dateBuf);
+    }
+  }
 
   // Record the tile rect so storeCoverBuffer (called from the theme) knows
   // which sub-region of the framebuffer to snapshot. ~16 KB in Portrait
